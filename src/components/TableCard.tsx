@@ -22,24 +22,30 @@ const Container = styled.div<{ remainingTime: number; interval: number }>`
   }};
 `;
 
+const ButtonContainer = styled.div`
+  display: flex;
+  gap: 10px;
+`;
+
 function TableCard({ tableNo, interval }: TableCardProps) {
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
   const [remainingTime, setRemainingTime] = useState<number>(0);
-  const [tableInterval] = useState<number>(interval);
+  const tableInterval = startDate && endDate ? (endDate.getTime() - startDate.getTime()) / 60000 : interval;
   const [intervalIds, setIntervalIds] = useState<NodeJS.Timeout[]>([]);
 
   useEffect(() => {
     const savedStartDate = localStorage.getItem(`table_${tableNo}_StartDate`);
+    const savedEndDate = localStorage.getItem(`table_${tableNo}_EndDate`);
 
-    if (!savedStartDate) return;
+    if (!savedStartDate || !savedEndDate) return;
     setStartDate(new Date(savedStartDate));
-    setEndDate(new Date(new Date(savedStartDate).getTime() + tableInterval * 60000));
+    setEndDate(new Date(savedEndDate));
 
     setIntervalIds([
       ...intervalIds,
       setInterval(() => {
-        const end = new Date(new Date(savedStartDate).getTime() + tableInterval * 60000);
+        const end = new Date(savedEndDate);
         const now = new Date();
         const diff = end.getTime() - now.getTime();
 
@@ -50,13 +56,17 @@ function TableCard({ tableNo, interval }: TableCardProps) {
 
   const startTableTimer = () => {
     const start = new Date();
+    const end = new Date(start.getTime() + 60000 * tableInterval);
+
     setStartDate(start);
-    setEndDate(new Date(new Date().getTime() + 60000 * tableInterval));
-    localStorage.setItem(`table_${tableNo}_StartDate`, new Date().toISOString());
+    setEndDate(end);
+
+    localStorage.setItem(`table_${tableNo}_StartDate`, start.toISOString());
+    localStorage.setItem(`table_${tableNo}_EndDate`, end.toISOString());
+
     setIntervalIds([
       ...intervalIds,
       setInterval(() => {
-        const end = new Date(start.getTime() + tableInterval * 60000);
         const now = new Date();
         const diff = end.getTime() - now.getTime();
 
@@ -66,13 +76,35 @@ function TableCard({ tableNo, interval }: TableCardProps) {
   };
 
   const endTableTimer = () => {
+    const input = confirm('테이블 사용을 종료하시겠습니까?');
+    if (!input) return;
+
     setStartDate(undefined);
     setEndDate(undefined);
     localStorage.removeItem(`table_${tableNo}_StartDate`);
+    localStorage.removeItem(`table_${tableNo}_EndDate`);
     setRemainingTime(0);
     console.log(intervalIds);
     intervalIds.forEach((intervalId) => clearInterval(intervalId));
     setIntervalIds([]);
+  };
+
+  const chargeTable = () => {
+    if (!endDate) return;
+
+    const end = new Date(endDate.getTime() + 60000 * 30);
+    setEndDate(end);
+    localStorage.setItem(`table_${tableNo}_EndDate`, end.toISOString());
+
+    intervalIds.forEach((intervalId) => clearInterval(intervalId));
+    setIntervalIds([
+      setInterval(() => {
+        const now = new Date();
+        const diff = end.getTime() - now.getTime();
+
+        setRemainingTime(diff);
+      }, 1000),
+    ]);
   };
 
   if (!startDate || !endDate)
@@ -95,7 +127,10 @@ function TableCard({ tableNo, interval }: TableCardProps) {
           남은 시간: {Math.floor(remainingTime / 60000)}분 {Math.floor((remainingTime % 60000) / 1000)}초
         </div>
       )}
-      <button onClick={endTableTimer}>테이블 사용 종료</button>
+      <ButtonContainer>
+        <button onClick={chargeTable}>테이블 30분 연장</button>
+        <button onClick={endTableTimer}>테이블 사용 종료</button>
+      </ButtonContainer>
     </Container>
   );
 }
